@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="background"></div>
+    <canvas id="gl"></canvas>
+    <p></p>
+</body>
+
+</html>
+<!-- Vertex Shader部分 各頂点に対して実行 -->
+<script id="vs" type="x-shader/x-vertex">#version 300 es 
+    in vec2 position;
+    in vec2 a_texCoord;
+    
+    out vec2 v_texCoord;
+    
+    void main() {
+        gl_Position = vec4(position, 0.0, 1.0);
+        v_texCoord = a_texCoord;
+    }
+</script>
+
+<!-- Fragment Shader部分 各ピクセルに対して実行 -->
+<script id="fs" type="x-shader/x-fragment">#version 300 es
+        #define PI 3.14159265358979323846
+        #define saturate(t) clamp(t, 0.0, 1.0)
+        precision highp float;
+        uniform float time;
+        uniform vec2 mouse, resolution;
+        
+        in vec2 v_texCoord;
+        out vec4 outColor;
+        
+        const int maxStep = 48;//ステップ数
+        const vec3 seaBaseColor = vec3(0.1, 0.2, 0.36);//海の基本の色
+        const vec3 seaColor = vec3(0.25, 0.4, 0.15);//seaBaseColorに加算する色
+        const float baseColorStrength = 0.85;//SeaBaseColorをどれだけ加算するか
+        const float seaColorStrength = 0.15;//SeaColorをどれだけ加算するか
+        const float shininess = 0.27;//輝度
+        
+        //波部分 いくつかの波を合成し、それっぽくする
+        //exp(sin(x))でそれっぽい波ができる
+        //座標に対する値と導関数を出しておく
+        vec4 wave(vec2 pos, vec2 dir, float freq, float stime) {
+            float t = dot(dir, pos) * freq + stime;
+            float r = exp(sin(t) - 1.0);
+            float d = r * cos(t);
+            return vec4(r, d * dir, d);
+        }
+        //上のwave関数で算出した値をもとに、いくつかの波を合成する
+        //xに値、yzwに法線ベクトルを入れる
+        vec4 getWaterValue(vec2 pos, int oct) {
+            vec2 r, p, d;
+            float freq = 1.0;
+            float w = 1.0;
+            float vResult, vWeight, iter;
+            //波を色々な方向から重ね合わせる
+            for(int i; i < oct; i++) {
+                vec2 p = vec2(cos(iter), sin(iter));
+                vec4 r = wave(pos, p, freq, time * 2.0);
+                pos += p * -r.w * w * 0.5;
+    
+                d += r.yz * w * freq;
+                vResult += r.x * w;
+                vWeight += w;
+                w *= 0.82;
+                freq *= 1.18;
+    
+                iter += 1232.399963;
+            }
+            return vec4(vResult / vWeight, normalize(vec3(-d.x, vWeight, -d.y)));
+        }
+
+        vec3 getSunDir() {
+            return normalize(vec3(sin(time * 0.05), 1.0, cos(time * 0.05)));
+        }
+
+        //距離関数たち
+        //空の色を出す
+        //上になればなるほど青く
+        vec3 getSkyColor(vec3 p, vec3 l) {
+            //微調整
+            p.y += 0.1;
+            float r = pow(1.0 - p.y, 2.0);
+            float g = 1.0 - p.y;
+            float b = clamp(0.3 + (1.0 - p.y) * 0.7, 0.5, 1.0);
+            p.y -= 0.105;
+            float sun = saturate(pow(max(0.0, dot(p, l)), 800.0) * 210.0);
+            return vec3(r, g, b) + sun;
+        }
+        
+        //メイン関数
+        void main(void) {
+            vec2 p = (gl_FragCoord.xy * 2.0 - resolution) / min(resolution.x, resolution.y);
+            vec2 m = vec2(mouse * 2.0 - 1.0);
+            m.y *= -1.0;
+    
+    
+            //波が交わるのは(0.0, 0.0, 0.0)地点のため、そこだと不自然
+            vec3 cPos = vec3(0.0, 2.0, 0.0);
+            vec3 cDir = normalize(vec3(cos(m.x) * cos(m.y), sin(m.y), sin(m.x) * cos(m.y)));
+            vec3 cSide = normalize(cross(cDir, vec3(0.0, 1.0, 0.0)));
+            vec3 cUp = normalize(cross(cSide, cDir));
+            //レイを定義
+            vec3 ray = normalize(cSide * p.x + cUp * p.y + cDir);
+            
+            vec3 lightDir = getSunDir();
+            vec3 color;
+            //if(ray.y >= -0.1) {
+                color = getSkyColor(ray, lightDir);
+            //    outColor = vec4(color, 1.0);
+            //    return;
+            //}
+            float dist, l, rayLength;
+            vec3 rPos = cPos;
+            vec4 seaData;
+            
+            for(int i; i < maxStep; i++) {
+                rPos = cPos + ray * dist;
+                seaData = getWaterValue(rPos.xz, 24);
+                dist += rPos.y - seaData.x;
+                l = length(cPos - rPos);
+                if(rPos.y < seaData.x + 0.01 || l > 40.0) {
+                    break;
+                }
+            }
+            if(l < 40.0) {
+                //フレネルしたり、拡散したり、いろいろ
+                vec3 normal = seaData.yzw;
+                float diff = saturate(dot(lightDir, normal));
+                float seaHeight = rPos.y - seaData.x;
+                float r = 0.02;
+                float facing = saturate(1.0 - dot(normal, -ray));
+                float fresnel = r + (1.0 - r) * pow(facing, 5.0);
+                vec3 reflectDir = reflect(ray, normal);
+                
+                vec3 seaBase = seaBaseColor * diff * baseColorStrength + mix(seaBaseColor, seaColor * seaColorStrength, diff);
+                vec3 seaReflect = getSkyColor(reflectDir, lightDir);
+                vec3 seaWater = mix(seaBase, seaReflect, fresnel);
+                float dotSpec = saturate(dot(reflectDir, lightDir) * 0.5 + 0.5);
+                float specular = (1.0 - fresnel) * saturate(lightDir.y) * pow(dotSpec, 256.0) * (shininess * 1.8 + 0.2);
+                specular += specular * 25.0 * saturate(shininess - 0.05);
+                
+                color = seaWater + seaColor * (seaHeight * 0.5 + 0.2) * 0.05 + specular;
+                
+                float fog = exp(-0.001 * pow(l, 2.0));
+                color *= fog;
+                color += 1.0 - fog;
+            }        
+            outColor = vec4(color, 1.0);
+        }
+        
+        </script>
+<script src="script.js"></script>
