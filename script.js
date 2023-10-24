@@ -7,7 +7,7 @@ const gl = c.getContext("webgl2");
 //canvasの解像度とサイズの設定
 let contentWidth = window.innerWidth;
 let contentHeight = window.innerHeight;
-c.width = Math.min(800, contentWidth);
+c.width = Math.min(1200, contentWidth);
 // c.width = 1600;
 let mouseScaleX = contentWidth / c.width;
 let mouseScaleY = contentHeight / c.height;
