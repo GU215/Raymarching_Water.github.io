@@ -52,7 +52,7 @@
         //座標に対する値と導関数を出しておく
         vec4 wave(vec2 pos, vec2 dir, float freq, float stime) {
             float t = dot(dir, pos) * freq + stime;
-            float r = exp(sin(t) - 1.0);
+            float r = exp(sin(t) - 1.0) * 1.25;
             float d = r * cos(t);
             return vec4(r, d * dir, d);
         }
@@ -93,9 +93,10 @@
             float r = pow(1.0 - p.y, 2.0);
             float g = 1.0 - p.y;
             float b = clamp(0.3 + (1.0 - p.y) * 0.7, 0.5, 1.0);
-            p.y -= 0.105;
-            float sun = saturate(pow(max(0.0, dot(p, l)), 800.0) * 210.0);
-            return vec3(r, g, b) + sun;
+            p.y -= 0.1;
+            float sunPower = saturate(pow(max(0.0, dot(p, l)), 400.0));
+            sunPower += saturate(pow(max(0.0, dot(p, l)), 5.0) * 0.5);
+            return vec3(r, g, b) + vec3(1, 0.9, 0.8) * sunPower;
         }
         
         //メイン関数
@@ -106,7 +107,7 @@
     
     
             //波が交わるのは(0.0, 0.0, 0.0)地点のため、そこだと不自然
-            vec3 cPos = vec3(8.0, 2.0, 8.0);
+            vec3 cPos = vec3(16.0, 3.0, 16.0);
             vec3 cDir = normalize(vec3(cos(m.x) * cos(m.y), sin(m.y), sin(m.x) * cos(m.y)));
             vec3 cSide = normalize(cross(cDir, vec3(0.0, 1.0, 0.0)));
             vec3 cUp = normalize(cross(cSide, cDir));
