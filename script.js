@@ -7,11 +7,10 @@ const gl = c.getContext("webgl2");
 //canvasの解像度とサイズの設定
 let contentWidth = window.innerWidth;
 let contentHeight = window.innerHeight;
-c.width = Math.min(1200, contentWidth);
-// c.width = 1600;
+c.width = contentWidth;
 let mouseScaleX = contentWidth / c.width;
 let mouseScaleY = contentHeight / c.height;
-c.height = Math.floor(c.width / contentWidth * contentHeight);
+c.height = contentHeight;
 
 
 //シェーダーのソースをHTML側から取得 + 変数色々の定義
